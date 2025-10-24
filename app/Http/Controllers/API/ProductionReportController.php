@@ -112,12 +112,17 @@ class ProductionReportController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $validated['reported_by'] = Auth::id();
-
         $order = ProductionOrder::findOrFail($validated['order_id']);
-        $validated['product_id'] = $order->product_id;
 
-        // Auto-fill target quantity from order
+        // Cek status order
+        if ($order->status !== 'finished') {
+            return response()->json([
+                'message' => 'Order produksi belum selesai. Tidak bisa membuat report.'
+            ], 400);
+        }
+
+        $validated['reported_by'] = Auth::id();
+        $validated['product_id'] = $order->product_id;
         $validated['quantity_target'] = $order->quantity_target;
         $validated['status_final'] = $order->status;
 

@@ -16,7 +16,7 @@ class ProductionOrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = ProductionOrder::with(['plan', 'product', 'assignedTo', 'logs']);
+        $query = ProductionOrder::with(['plan', 'product', 'assignedTo', 'logs.changedBy']);
 
         // Filter status
         if ($request->filled('status')) {
@@ -97,6 +97,7 @@ class ProductionOrderController extends Controller
 
         ProductionLog::create([
             'order_id' => $order->id,
+            'log_type' => 'order',
             'old_status' => null,
             'new_status' => 'waiting',
             'note' => 'Order created',
@@ -199,7 +200,7 @@ class ProductionOrderController extends Controller
             'old_status' => $oldStatus,
             'new_status' => $newStatus,
             'note' => $note,
-            'changes' => $changes,
+            'changes' => json_encode($changes), // 🔹 fix array to string
             'changed_by' => Auth::id(),
             'changed_at' => now()
         ]);
@@ -230,7 +231,6 @@ class ProductionOrderController extends Controller
             $quantityDone = $validated['quantity_done'] ?? 0;
 
             $order->quantity_done = ($order->quantity_done ?? 0) + $quantityDone;
-
             $order->quantity_remaining = max($order->quantity_target - $order->quantity_done, 0);
 
             if ($order->quantity_remaining === 0) {
@@ -266,6 +266,8 @@ class ProductionOrderController extends Controller
             'data' => $order
         ]);
     }
+
+
 
     /**
      * Get available production orders (those without reports)

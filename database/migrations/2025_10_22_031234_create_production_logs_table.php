@@ -24,6 +24,7 @@ return new class extends Migration
             $table->json('changes')->nullable(); 
             $table->foreignId('changed_by')->constrained('users');
             $table->timestamp('changed_at')->useCurrent();
+            $table->timestamps();
         });
     }
 

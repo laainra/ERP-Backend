@@ -8,10 +8,23 @@ use Illuminate\Database\Eloquent\Model;
 class ProductionPlan extends Model
 {
     use HasFactory;
+    public $timestamps = false;
     protected $fillable = [
     'plan_code', 'product_id', 'quantity', 'target_finish_date', 'notes',
     'status', 'creator_id', 'approved_by', 'approved_at'
     ];
+
+    protected $appends = ['has_order', 'order_count'];
+
+    public function getHasOrderAttribute()
+    {
+        return $this->order ? true : false;
+    }
+
+    public function getOrderCountAttribute()
+    {
+        return $this->order ? 1 : 0;
+    }
 
 
     public function product() {

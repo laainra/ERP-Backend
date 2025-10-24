@@ -15,30 +15,30 @@ class ProductionPlanController extends Controller
      */
     public function index(Request $request)
     {
-        $perPage = $request->get('per_page', 10); // default 10
+        $perPage = $request->get('per_page', 10);
         $search = $request->get('search', '');
-        $sortField = $request->get('sort_field', 'id');
+        $sortField = $request->get('sort_field', 'created_at');
         $sortOrder = $request->get('sort_order', 'desc');
 
-        // Query awal
         $query = ProductionPlan::with(['product', 'creator', 'approver', 'order']);
 
-        // 🔍 Filter pencarian
         if (!empty($search)) {
             $query->where(function ($q) use ($search) {
                 $q->where('plan_code', 'like', "%{$search}%")
                 ->orWhere('status', 'like', "%{$search}%")
-                ->orWhereHas('product', function ($q2) use ($search) {
-                    $q2->where('name', 'like', "%{$search}%");
-                })
-                ->orWhereHas('creator', function ($q3) use ($search) {
-                    $q3->where('name', 'like', "%{$search}%");
-                });
+                ->orWhereHas('product', fn($q2) => $q2->where('name', 'like', "%{$search}%"))
+                ->orWhereHas('creator', fn($q3) => $q3->where('name', 'like', "%{$search}%"));
             });
         }
 
-        // 🔽 Sorting dan pagination
         $plans = $query->orderBy($sortField, $sortOrder)->paginate($perPage);
+
+        // Transform data tanpa getCollection
+        $plans->transform(function ($plan) {
+            $plan->has_order = $plan->order ? true : false;
+            $plan->order_count = $plan->order ? 1 : 0;
+            return $plan;
+        });
 
         return response()->json($plans);
     }
@@ -48,19 +48,20 @@ class ProductionPlanController extends Controller
      * Log production plan changes
      */
 
-    private function logPlanChange($plan, $oldStatus, $newStatus, $note = null, $changes = [])
-    {
-        ProductionLog::create([
-            'log_type' => 'plan',
-            'plan_id' => $plan->id,
-            'old_status' => $oldStatus,
-            'new_status' => $newStatus,
-            'note' => $note,
-            'changes' => $changes,
-            'changed_by' => Auth::id(),
-            'changed_at' => now()
-        ]);
-    }
+        private function logPlanChange($plan, $oldStatus, $newStatus, $note = null, $changes = [])
+        {
+            ProductionLog::create([
+                'log_type'   => 'plan',
+                'plan_id'    => $plan->id,
+                'old_status' => $oldStatus,
+                'new_status' => $newStatus,
+                'note'       => $note,
+                // ubah array menjadi string JSON agar tidak error
+                'changes'    => json_encode($changes, JSON_UNESCAPED_UNICODE),
+                'changed_by' => Auth::id(),
+                'changed_at' => now()
+            ]);
+        }
 
 
 
@@ -179,7 +180,7 @@ class ProductionPlanController extends Controller
             'Plan approved by manager'
         );
 
-        return response()->json(['message' => 'Production plan approved successfully', 'data' => $plan]);
+        return response()->json(['message' => 'Production plan approved successfully', 'data' => $plan->fresh()->toArray()]);
     }
 
     /**

@@ -29,7 +29,13 @@ class ProductionOrder extends Model
     }
 
 
-    public function logs() {
-    return $this->hasMany(ProductionLog::class, 'order_id');
+    public function logs()
+    {
+        return $this->hasMany(ProductionLog::class, 'order_id');
+    }
+
+    public function lastLog()
+    {
+        return $this->hasOne(ProductionLog::class, 'order_id')->latest('changed_at');
     }
 }
