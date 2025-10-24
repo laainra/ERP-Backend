@@ -14,13 +14,16 @@ return new class extends Migration
     public function up()
     {
         Schema::create('production_logs', function (Blueprint $table) {
-        $table->id();
-        $table->foreignId('order_id')->constrained('production_orders')->onDelete('cascade');
-        $table->string('old_status')->nullable();
-        $table->string('new_status');
-        $table->text('note')->nullable();
-        $table->foreignId('changed_by')->constrained('users');
-        $table->timestamp('changed_at')->useCurrent();
+            $table->id();
+            $table->string('log_type'); 
+            $table->foreignId('plan_id')->nullable()->constrained('production_plans')->onDelete('cascade');
+            $table->foreignId('order_id')->nullable()->constrained('production_orders')->onDelete('cascade');
+            $table->string('old_status')->nullable();
+            $table->string('new_status');
+            $table->text('note')->nullable();
+            $table->json('changes')->nullable(); 
+            $table->foreignId('changed_by')->constrained('users');
+            $table->timestamp('changed_at')->useCurrent();
         });
     }
 

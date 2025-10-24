@@ -8,21 +8,28 @@ use Illuminate\Database\Eloquent\Model;
 class ProductionLog extends Model
 {
     use HasFactory;
-    protected $fillable = ['order_id', 'old_status', 'new_status', 'note', 'changed_by', 'changed_at'];
 
-
-    public $timestamps = false;
-
-
-    protected $dates = ['changed_at'];
-
+    protected $fillable = [
+        'log_type',
+        'plan_id',
+        'order_id',
+        'old_status',
+        'new_status',
+        'note',
+        'changes',
+        'changed_by',
+        'changed_at',
+    ];
 
     public function order() {
-    return $this->belongsTo(ProductionOrder::class, 'order_id');
+        return $this->belongsTo(ProductionOrder::class, 'order_id');
     }
 
+    public function plan() {
+        return $this->belongsTo(ProductionPlan::class, 'plan_id');
+    }
 
-    public function changer() {
-    return $this->belongsTo(User::class, 'changed_by');
+    public function changedBy() {
+        return $this->belongsTo(User::class, 'changed_by');
     }
 }

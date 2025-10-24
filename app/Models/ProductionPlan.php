@@ -9,7 +9,7 @@ class ProductionPlan extends Model
 {
     use HasFactory;
     protected $fillable = [
-    'plan_code', 'product_id', 'quantity', 'target_finish_date', 'due_days', 'notes',
+    'plan_code', 'product_id', 'quantity', 'target_finish_date', 'notes',
     'status', 'creator_id', 'approved_by', 'approved_at'
     ];
 

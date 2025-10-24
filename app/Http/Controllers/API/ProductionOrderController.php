@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\ProductionOrder;
 use App\Models\ProductionLog;
+use App\Models\ProductionReport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -15,24 +16,46 @@ class ProductionOrderController extends Controller
      */
     public function index(Request $request)
     {
-        $query = ProductionOrder::with('plan', 'product', 'assignedTo', 'logs');
+        $query = ProductionOrder::with(['plan', 'product', 'assignedTo', 'logs']);
 
-        if ($request->has('status') && $request->status !== null) {
+        // Filter status
+        if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-
-        if ($request->has('plan_id') && $request->plan_id !== null) {
+        // Filter plan_id
+        if ($request->filled('plan_id')) {
             $query->where('plan_id', $request->plan_id);
         }
 
-        $orders = $query->latest()->get();
+        // 🔍 Hanya filter kalau search tidak kosong
+        if ($request->has('search') && trim($request->search) !== '') {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('order_code', 'like', "%{$search}%")
+                ->orWhereHas('product', fn($q2) => $q2->where('name', 'like', "%{$search}%"))
+                ->orWhereHas('assignedTo', fn($q3) => $q3->where('name', 'like', "%{$search}%"));
+            });
+        }
+
+        // Sorting dan pagination
+        $sortField = $request->get('sort_field', 'created_at');
+        $sortOrder = $request->get('sort_order', 'desc');
+        $query->orderBy($sortField, $sortOrder);
+
+        $perPage = $request->get('per_page', 10);
+        $orders = $query->paginate($perPage);
 
         return response()->json([
             'message' => 'Production order data retrieved successfully',
-            'data' => $orders
-        ], 200);
+            'data' => $orders->items(),
+            'current_page' => $orders->currentPage(),
+            'last_page' => $orders->lastPage(),
+            'per_page' => $orders->perPage(),
+            'total' => $orders->total(),
+        ]);
     }
+
 
 
     /**
@@ -162,6 +185,26 @@ class ProductionOrderController extends Controller
         ], 200);
     }
 
+
+    /**
+     * Log order status change
+     */
+
+    private function logOrderChange($order, $oldStatus, $newStatus, $note = null, $changes = [])
+    {
+        ProductionLog::create([
+            'log_type' => 'order',
+            'plan_id' => $order->plan_id,
+            'order_id' => $order->id,
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus,
+            'note' => $note,
+            'changes' => $changes,
+            'changed_by' => Auth::id(),
+            'changed_at' => now()
+        ]);
+    }
+
     /**
      * Update production order status
      */
@@ -170,7 +213,7 @@ class ProductionOrderController extends Controller
     {
         $validated = $request->validate([
             'new_status' => 'required|string|in:waiting,in_process,finished',
-            'quantity_done' => 'nullable|integer|min:0', // jumlah yang sudah selesai
+            'quantity_done' => 'nullable|integer|min:0', 
             'note' => 'nullable|string'
         ]);
 
@@ -179,22 +222,17 @@ class ProductionOrderController extends Controller
 
         $updateData = ['status' => $validated['new_status']];
 
-        // Set started_at jika pertama kali in_process
         if ($validated['new_status'] === 'in_process' && !$order->started_at) {
             $updateData['started_at'] = now();
         }
 
-        // Tambahkan logika quantity_done dan quantity_remaining
         if ($validated['new_status'] === 'in_process') {
             $quantityDone = $validated['quantity_done'] ?? 0;
 
-            // Hitung total quantity done sampai sekarang
             $order->quantity_done = ($order->quantity_done ?? 0) + $quantityDone;
 
-            // Hitung sisa quantity
             $order->quantity_remaining = max($order->quantity_target - $order->quantity_done, 0);
 
-            // Jika sudah selesai semua, otomatis ubah status ke finished
             if ($order->quantity_remaining === 0) {
                 $updateData['status'] = 'finished';
                 $updateData['finished_at'] = now();
@@ -204,7 +242,6 @@ class ProductionOrderController extends Controller
             $updateData['quantity_remaining'] = $order->quantity_remaining;
         }
 
-        // Jika finished langsung
         if ($validated['new_status'] === 'finished') {
             $updateData['finished_at'] = now();
             $updateData['quantity_done'] = $order->quantity_target;
@@ -213,14 +250,16 @@ class ProductionOrderController extends Controller
 
         $order->update($updateData);
 
-        ProductionLog::create([
-            'order_id' => $order->id,
-            'old_status' => $oldStatus,
-            'new_status' => $updateData['status'],
-            'note' => $validated['note'] ?? '',
-            'changed_by' => Auth::id(),
-            'changed_at' => now()
-        ]);
+        $this->logOrderChange(
+            $order,
+            $oldStatus,
+            $updateData['status'],
+            $validated['note'] ?? 'Status updated to ' . $updateData['status'],
+            [
+                'quantity_done' => $order->quantity_done,
+                'quantity_remaining' => $order->quantity_remaining
+            ]
+        );
 
         return response()->json([
             'message' => 'Status updated successfully',
@@ -228,6 +267,19 @@ class ProductionOrderController extends Controller
         ]);
     }
 
+    /**
+     * Get available production orders (those without reports)
+     */
+    public function availableOrders()
+    {
+        $reportedOrderIds = ProductionReport::pluck('order_id')->toArray();
+
+        $orders = ProductionOrder::with('plan.product')
+            ->whereNotIn('id', $reportedOrderIds)
+            ->get();
+
+        return response()->json($orders);
+    }
     
     /**
      * Get logs for a production order

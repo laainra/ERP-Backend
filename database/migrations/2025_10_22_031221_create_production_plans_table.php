@@ -19,7 +19,6 @@ return new class extends Migration
         $table->foreignId('product_id')->constrained()->onDelete('restrict');
         $table->unsignedInteger('quantity');
         $table->date('target_finish_date')->nullable();
-        $table->integer('due_days')->default(7);
         $table->text('notes')->nullable();
         $table->enum('status',['created','pending_approval','approved','rejected','in_process'])->default('created');
         $table->foreignId('creator_id')->constrained('users');

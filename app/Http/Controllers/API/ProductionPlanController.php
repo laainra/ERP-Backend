@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\ProductionLog;
 use App\Models\ProductionPlan;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,24 +15,51 @@ class ProductionPlanController extends Controller
      */
     public function index(Request $request)
     {
-        $query = ProductionPlan::with('product', 'creator', 'approver', 'order'); // tambahkan 'order'
+        $perPage = $request->get('per_page', 10); // default 10
+        $search = $request->get('search', '');
+        $sortField = $request->get('sort_field', 'id');
+        $sortOrder = $request->get('sort_order', 'desc');
 
-        // Filter
-        if ($request->status) {
-            $query->where('status', $request->status);
-        }
-        if ($request->product_id) {
-            $query->where('product_id', $request->product_id);
-        }
-        if ($request->from && $request->to) {
-            $query->whereBetween('created_at', [$request->from, $request->to]);
+        // Query awal
+        $query = ProductionPlan::with(['product', 'creator', 'approver', 'order']);
+
+        // 🔍 Filter pencarian
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('plan_code', 'like', "%{$search}%")
+                ->orWhere('status', 'like', "%{$search}%")
+                ->orWhereHas('product', function ($q2) use ($search) {
+                    $q2->where('name', 'like', "%{$search}%");
+                })
+                ->orWhereHas('creator', function ($q3) use ($search) {
+                    $q3->where('name', 'like', "%{$search}%");
+                });
+            });
         }
 
-        // Pagination
-        $perPage = in_array((int)$request->perPage, [10, 25, 50, 100]) ? (int)$request->perPage : 10;
-        $plans = $query->latest()->paginate($perPage);
+        // 🔽 Sorting dan pagination
+        $plans = $query->orderBy($sortField, $sortOrder)->paginate($perPage);
 
         return response()->json($plans);
+    }
+
+
+    /**
+     * Log production plan changes
+     */
+
+    private function logPlanChange($plan, $oldStatus, $newStatus, $note = null, $changes = [])
+    {
+        ProductionLog::create([
+            'log_type' => 'plan',
+            'plan_id' => $plan->id,
+            'old_status' => $oldStatus,
+            'new_status' => $newStatus,
+            'note' => $note,
+            'changes' => $changes,
+            'changed_by' => Auth::id(),
+            'changed_at' => now()
+        ]);
     }
 
 
@@ -59,6 +87,14 @@ class ProductionPlanController extends Controller
         $validated['status'] = 'pending_approval';
 
         $plan = ProductionPlan::create($validated);
+
+        $this->logPlanChange(
+            $plan, 
+            null, 
+            'pending_approval', 
+            'Production plan created',
+            $validated
+        );
 
         return response()->json([
             'message' => 'Production plan created successfully',
@@ -128,11 +164,20 @@ class ProductionPlanController extends Controller
             return response()->json(['message' => 'Plan already processed'], 403);
         }
 
+        $oldStatus = $plan->status;
+
         $plan->update([
             'status' => 'approved',
             'approved_by' => $user->id,
             'approved_at' => now()
         ]);
+
+        $this->logPlanChange(
+            $plan,
+            $oldStatus,
+            'approved',
+            'Plan approved by manager'
+        );
 
         return response()->json(['message' => 'Production plan approved successfully', 'data' => $plan]);
     }

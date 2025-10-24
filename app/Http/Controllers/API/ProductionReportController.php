@@ -17,57 +17,73 @@ class ProductionReportController extends Controller
      * List reports (linked to orders and plans) by period
      */
 
+    public function index(Request $request)
+    {
+        $perPage = (int) $request->get('per_page', 10);
+        $search = $request->get('search', '');
+        $sortField = $request->get('sort_field', 'created_at');
+        $sortOrder = strtolower($request->get('sort_order', 'desc')) === 'asc' ? 'asc' : 'desc';
 
-public function index(Request $request)
-{
-    $query = ProductionReport::with([
-        'order.plan.product',
-        'reporter'
-    ]);
+        $query = ProductionReport::with(['order', 'reporter', 'order.plan.product']);
 
-    // Filter by period
-    if ($request->type === 'weekly') {
-        $query->whereBetween('created_at', [now()->startOfWeek(), now()->endOfWeek()]);
-    } elseif ($request->type === 'monthly') {
-        $query->whereMonth('created_at', now()->month);
-    } elseif ($request->has(['from', 'to'])) {
-        $query->whereBetween('created_at', [$request->from, $request->to]);
+        // Pencarian (global)
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->whereHas('order.plan.product', function ($q2) use ($search) {
+                    $q2->where('name', 'like', "%{$search}%");
+                })
+                ->orWhere('status_final', 'like', "%{$search}%")
+                ->orWhere('storage_location', 'like', "%{$search}%")
+                ->orWhere('notes', 'like', "%{$search}%");
+            });
+        }
+
+        // Sorting - hanya izinkan field tertentu agar safe
+        $allowedSorts = ['created_at', 'quantity_actual', 'quantity_reject', 'status_final'];
+        if (in_array($sortField, $allowedSorts)) {
+            $query->orderBy($sortField, $sortOrder);
+        } else {
+            // Jika user coba sort by product_name (relasi) — fallback ke created_at
+            $query->orderBy('created_at', $sortOrder);
+        }
+
+        // Pagination
+        $reportsPaginator = $query->paginate($perPage);
+
+        // Ambil items (array of models) dan transform menjadi struktur yang frontend butuhkan
+        $items = $reportsPaginator->items();
+
+        $mapped = array_map(function ($report) {
+            // $report bisa berupa model atau array tergantung versi; pastikan akses dengan property
+            $order = $report->order ?? null;
+            $plan = $order ? ($order->plan ?? null) : null;
+            $product = $plan ? ($plan->product ?? null) : null;
+
+            return [
+                'id' => $report->id,
+                'order' => $order, 
+                'product' => $product, 
+                'product_name' => $product->name ?? '-',
+                'order_code' => $order->order_code ?? null,
+                'quantity_target' => $order->quantity_target ?? $plan->quantity ?? null,
+                'quantity_actual' => $report->quantity_actual,
+                'quantity_reject' => $report->quantity_reject,
+                'status_final' => $report->status_final,
+                'storage_location' => $report->storage_location,
+                'report_date' => optional($report->created_at)->toDateTimeString(),
+            ];
+        }, $items);
+
+        // Kembalikan struktur paginator yang konsisten untuk frontend
+        return response()->json([
+            'data' => $mapped,
+            'current_page' => $reportsPaginator->currentPage(),
+            'last_page' => $reportsPaginator->lastPage(),
+            'per_page' => $reportsPaginator->perPage(),
+            'total' => $reportsPaginator->total(),
+        ]);
     }
 
-    $reports = $query->orderByDesc('created_at')->get();
-
-    $data = $reports->map(function ($report) {
-        $order = $report->order;
-        $plan = $order?->plan;
-        $product = $plan?->product;
-
-        $started_at = $order?->started_at ? Carbon::parse($order->started_at) : null;
-        $finished_at = $order?->finished_at ? Carbon::parse($order->finished_at) : null;
-
-        return [
-            'report_id' => $report->id,
-            'order_code' => $order->order_code ?? null,
-            'plan_code' => $plan->plan_code ?? null,
-            'product_name' => $product->name ?? null,
-            'quantity_target' => $order->quantity_target ?? $plan->quantity ?? 0,
-            'quantity_actual' => $report->quantity_actual ?? 0,
-            'quantity_reject' => $report->quantity_reject ?? 0,
-            'status_final' => $report->status_final ?? null,
-            'started_at' => $started_at?->format('Y-m-d H:i:s'),
-            'finished_at' => $finished_at?->format('Y-m-d H:i:s'),
-            'duration_days' => ($started_at && $finished_at) ? $finished_at->diffInDays($started_at) : null,
-            'reported_by' => $report->reporter->name ?? null,
-            'notes' => $report->notes ?? null,
-            'storage_location' => $report->storage_location ?? null,
-        ];
-    });
-
-    return response()->json([
-        'period' => $request->type ?? 'custom',
-        'count' => $data->count(),
-        'data' => $data
-    ]);
-}
 
     /**
      * GET /api/reports/{id}
