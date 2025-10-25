@@ -16,9 +16,9 @@ return new class extends Migration
             $table->integer('quantity_target');
             $table->integer('quantity_actual');
             $table->integer('quantity_reject')->default(0);
-            $table->string('status_final')->default('completed');
+            $table->string('status_final');
             $table->string('storage_location')->nullable(); // diserahkan ke gudang mana
-            $table->date('report_date')->default(now());
+            $table->date('report_date')->nullable();
             $table->text('notes')->nullable();
             $table->timestamps();
         });
