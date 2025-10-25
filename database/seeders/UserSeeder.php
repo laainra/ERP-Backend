@@ -13,28 +13,39 @@ class UserSeeder extends Seeder
         // Manager PPIC
         User::create([
             'name' => 'John',
-            'email' => 'john@elitech.com',
+            'email' => 'john.manager@elitech.com',
             'role' => 'manager',
-            'module_access' => 'ppic,production',
             'password' => Hash::make('password123'),
         ]);
 
         // Staff PPIC
         User::create([
             'name' => 'Ellie',
-            'email' => 'ellie@elitech.com',
+            'email' => 'ellie.ppic@elitech.com',
             'role' => 'staff',
-            'module_access' => 'ppic',
+            'password' => Hash::make('password123'),
+        ]);
+
+        User::create([
+            'name' => 'Mark',
+            'email' => 'mark.ppic@elitech.com',
+            'role' => 'staff',
             'password' => Hash::make('password123'),
         ]);
 
         // Staff Production
         User::create([
             'name' => 'Citra',
-            'email' => 'citra@elitech.com',
+            'email' => 'citra.production@elitech.com',
             'role' => 'staff',
-            'module_access' => 'production',
             'password' => Hash::make('password123'),
         ]);
+        User::create([
+            'name' => 'Dani',
+            'email' => 'dani.production@elitech.com',
+            'role' => 'staff',
+            'password' => Hash::make('password123'),
+        ]);
+
     }
 }
