@@ -120,7 +120,6 @@ Seeder akan menambahkan data awal seperti user admin dan contoh produk.
 php artisan serve
 ```
 
-Seeder akan menambahkan data awal seperti user admin dan contoh produk.
 
 ---
 
