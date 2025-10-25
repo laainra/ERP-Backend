@@ -113,6 +113,17 @@ php artisan migrate --seed
 Seeder akan menambahkan data awal seperti user admin dan contoh produk.
 
 ---
+## 🧱 Jalankan Server
+
+### Jalankan server laravel
+```bash
+php artisan serve
+```
+
+Seeder akan menambahkan data awal seperti user admin dan contoh produk.
+
+---
+
 
 ## 🔐 Authentication (Sanctum)
 
