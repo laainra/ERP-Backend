@@ -214,7 +214,7 @@ class ProductionOrderController extends Controller
     {
         $validated = $request->validate([
             'new_status' => 'required|string|in:waiting,in_process,finished',
-            'quantity_done' => 'nullable|integer|min:0', 
+            'quantity_done' => 'nullable|integer|min:0',
             'note' => 'nullable|string'
         ]);
 
@@ -227,11 +227,12 @@ class ProductionOrderController extends Controller
             $updateData['started_at'] = now();
         }
 
+        // ====== HANDLE STATUS IN PROCESS ======
         if ($validated['new_status'] === 'in_process') {
-            $quantityDone = $validated['quantity_done'] ?? 0;
+            $quantityDone = $validated['quantity_done'] ?? $order->quantity_done ?? 0;
 
-            $order->quantity_done = ($order->quantity_done ?? 0) + $quantityDone;
-            $order->quantity_remaining = max($order->quantity_target - $order->quantity_done, 0);
+            $order->quantity_done = $quantityDone;
+            $order->quantity_remaining = max($order->quantity_target - $quantityDone, 0);
 
             if ($order->quantity_remaining === 0) {
                 $updateData['status'] = 'finished';
@@ -242,6 +243,7 @@ class ProductionOrderController extends Controller
             $updateData['quantity_remaining'] = $order->quantity_remaining;
         }
 
+        // ====== HANDLE STATUS FINISHED ======
         if ($validated['new_status'] === 'finished') {
             $updateData['finished_at'] = now();
             $updateData['quantity_done'] = $order->quantity_target;
@@ -250,6 +252,7 @@ class ProductionOrderController extends Controller
 
         $order->update($updateData);
 
+        // Catat log perubahan
         $this->logOrderChange(
             $order,
             $oldStatus,
